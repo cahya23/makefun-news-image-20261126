@@ -1,345 +1,282 @@
-# The World Today -- Thursday, 26 November 2026.
-#
-# A one-page newspaper front page, painted pixel by pixel with
-# Python's standard library only. It reads no files, uses no
-# network and no randomness, so two runs write byte-identical
-# PNGs. The page is a masthead, a lead story on the US tariff
-# plan with a bar chart of the proposed ceilings, six short
-# stories in two rows, an also-today strip and a footer, all
-# drawn with a small 5x7 bitmap font written out below.
-#
-# The day's stories, each date-checked against reporting
-# dated 26 November 2026 (most were first reported late on
-# Wednesday 25 November and carried as Thursday's news):
-#   LEAD -- TARIFFS: the US proposed new tariffs on 14
-#     trading partners, including Indonesia, China, the EU,
-#     Japan and India, to fight excess factory capacity.
-#     Proposed ceilings: Vietnam 35%, India 25%, China 20%,
-#     Indonesia 18%, EU and Japan 15%. Japan called the
-#     plan regrettable; Indonesia is reviewing it.
-#   CAIRO: a fuel tanker crashed and caught fire on the
-#     Ring Road in Warraq, killing at least 31 people and
-#     injuring 21; 27 vehicles were destroyed.
-#   GULF: Yemen's Houthis said they hit Saudi Arabia's
-#     Ras Tanura refinery and Riyadh's financial district;
-#     a projectile fell at Jazan port and a drone was
-#     downed near Jeddah port. Brent rose 3.5% on Wednesday.
-#   MARKETS: the Nasdaq 100 briefly fell 20% from its
-#     October peak, touching bear-market ground, before
-#     recovering; it closed down 0.64%. Nvidia fell 3.9%.
-#   SAVASLEYKA: Ukraine said it damaged five Russian
-#     jets at the Savasleyka air base, three MiG-31s and
-#     two Su-34s, in strikes on 24-25 November.
-#   IRAN: the US told its citizens to leave Iran at once,
-#     warning hostilities could escalate fast, after Iran
-#     hit US assets in Bahrain and Kuwait.
-#   EU: leaders met in Brussels on Thursday to argue over
-#     a 45 billion euro loan for Ukraine and a 1.6 trillion
-#     euro seven-year budget; four states object to the loan.
-#   ALSO: Bogor mine, 13 dead found and 13 still trapped;
-#     Kim Jong Un urges wider tactical nuclear deployment;
-#     the FCC cleared SpaceX to deploy 1 million Starmind
-#     data-centre satellites; judges urged prosecutors to
-#     drop Netanyahu's Case 4000 bribery charge; Liverpool
-#     beat Club Brugge 3-0 in the Champions League.
-#
-# Two items from the day's wire that were NOT used: the
-# Cartagena supermarket rescue (76 hostages freed) was
-# already Wednesday 25 November's news, and an unverified
-# Poland no-fly-zone report was left out.
+#!/usr/bin/env python3
+"""THE WORLD TODAY - Thursday 26 November 2026.
 
+Draws a one-page newspaper front page in pure Python stdlib.
+No network, no randomness, no file reads. The image is drawn
+from scratch with a hand-typed 5x7 bitmap font and a hand-written
+PNG encoder (zlib + struct). Two runs give identical bytes.
+"""
 import os
 import struct
 import zlib
 
-W, H = 1024, 1024
+W = 1024
+H = 1024
 
-PAPER = (247, 242, 231)
+WHITE = (255, 255, 255)
+BLACK = (10, 10, 10)
 INK = (20, 20, 20)
-RED = (178, 34, 34)
-NAVY = (32, 52, 96)
-GREY = (110, 106, 98)
-PALE = (232, 226, 212)
-GOLD = (176, 132, 32)
+GREY = (90, 90, 90)
+LIGHT = (238, 238, 238)
+NAVY = (18, 42, 86)
+RED = (168, 28, 28)
+BLUE = (28, 78, 150)
 
-# ---------------------------------------------------------------- font
-# Glyphs are seven rows of five cells. '#' is ink, ' ' is empty.
-# Only capitals are needed: every string is upper-cased first.
-
-GLYPHS = {
-    'A': (" ### ", "#   #", "#   #", "#####", "#   #", "#   #", "#   #"),
-    'B': ("#### ", "#   #", "#   #", "#### ", "#   #", "#   #", "#### "),
-    'C': (" ### ", "#   #", "#    ", "#    ", "#    ", "#   #", " ### "),
-    'D': ("#### ", "#   #", "#   #", "#   #", "#   #", "#   #", "#### "),
-    'E': ("#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#####"),
-    'F': ("#####", "#    ", "#    ", "#### ", "#    ", "#    ", "#    "),
-    'G': (" ### ", "#   #", "#    ", "# ###", "#   #", "#   #", " ####"),
-    'H': ("#   #", "#   #", "#   #", "#####", "#   #", "#   #", "#   #"),
-    'I': (" ### ", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", " ### "),
-    'J': ("  ###", "   # ", "   # ", "   # ", "   # ", "#  # ", " ##  "),
-    'K': ("#   #", "#  # ", "# #  ", "##   ", "# #  ", "#  # ", "#   #"),
-    'L': ("#    ", "#    ", "#    ", "#    ", "#    ", "#    ", "#####"),
-    'M': ("#   #", "## ##", "# # #", "# # #", "#   #", "#   #", "#   #"),
-    'N': ("#   #", "##  #", "# # #", "#  ##", "#   #", "#   #", "#   #"),
-    'O': (" ### ", "#   #", "#   #", "#   #", "#   #", "#   #", " ### "),
-    'P': ("#### ", "#   #", "#   #", "#### ", "#    ", "#    ", "#    "),
-    'Q': (" ### ", "#   #", "#   #", "#   #", "# # #", "#  # ", " ## #"),
-    'R': ("#### ", "#   #", "#   #", "#### ", "# #  ", "#  # ", "#   #"),
-    'S': (" ####", "#    ", "#    ", " ### ", "    #", "    #", "#### "),
-    'T': ("#####", "  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "  #  "),
-    'U': ("#   #", "#   #", "#   #", "#   #", "#   #", "#   #", " ### "),
-    'V': ("#   #", "#   #", "#   #", "#   #", "#   #", " # # ", "  #  "),
-    'W': ("#   #", "#   #", "#   #", "# # #", "# # #", "## ##", "#   #"),
-    'X': ("#   #", "#   #", " # # ", "  #  ", " # # ", "#   #", "#   #"),
-    'Y': ("#   #", "#   #", " # # ", "  #  ", "  #  ", "  #  ", "  #  "),
-    'Z': ("#####", "    #", "   # ", "  #  ", " #   ", "#    ", "#####"),
-    '0': (" ### ", "#   #", "#  ##", "# # #", "##  #", "#   #", " ### "),
-    '1': ("  #  ", " ##  ", "  #  ", "  #  ", "  #  ", "  #  ", " ### "),
-    '2': (" ### ", "#   #", "    #", "   # ", "  #  ", " #   ", "#####"),
-    '3': ("#####", "   # ", "  #  ", "   # ", "    #", "#   #", " ### "),
-    '4': ("   # ", "  ## ", " # # ", "#  # ", "#####", "   # ", "   # "),
-    '5': ("#####", "#    ", "#### ", "    #", "    #", "#   #", " ### "),
-    '6': ("  ## ", " #   ", "#    ", "#### ", "#   #", "#   #", " ### "),
-    '7': ("#####", "    #", "   # ", "  #  ", " #   ", " #   ", " #   "),
-    '8': (" ### ", "#   #", "#   #", " ### ", "#   #", "#   #", " ### "),
-    '9': (" ### ", "#   #", "#   #", " ####", "    #", "   # ", " ##  "),
-    '.': ("     ", "     ", "     ", "     ", "     ", " ##  ", " ##  "),
-    ',': ("     ", "     ", "     ", "     ", " ##  ", "  #  ", " #   "),
-    '-': ("     ", "     ", "     ", " ### ", "     ", "     ", "     "),
-    "'": ("  #  ", "  #  ", " #   ", "     ", "     ", "     ", "     "),
-    '%': ("##  #", "## # ", "   # ", "  #  ", " #   ", " # ##", "#  ##"),
-    '/': ("    #", "   # ", "   # ", "  #  ", " #   ", " #   ", "#    "),
-    '(': ("   # ", "  #  ", " #   ", " #   ", " #   ", "  #  ", "   # "),
-    ')': (" #   ", "  #  ", "   # ", "   # ", "   # ", "  #  ", " #   "),
-    '+': ("     ", "  #  ", "  #  ", "#####", "  #  ", "  #  ", "     "),
-    '&': (" ##  ", "#  # ", "# #  ", " #   ", "# # #", "#  # ", " ## #"),
-    '!': ("  #  ", "  #  ", "  #  ", "  #  ", "  #  ", "     ", "  #  "),
-    '?': (" ### ", "#   #", "    #", "   # ", "  #  ", "     ", "  #  "),
-    ':': ("     ", " ##  ", " ##  ", "     ", " ##  ", " ##  ", "     "),
-    ';': ("     ", " ##  ", " ##  ", "     ", " ##  ", "  #  ", " #   "),
-    '$': ("  #  ", " ####", "# #  ", " ### ", "  # #", "#### ", "  #  "),
-    '=': ("     ", "     ", "#####", "     ", "#####", "     ", "     "),
-    ' ': ("     ", "     ", "     ", "     ", "     ", "     ", "     "),
+# 5x7 bitmap font, typed by hand. Each glyph is 7 rows of 5 bits.
+FONT = {
+    'A': ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
+    'B': ("11110", "10001", "10001", "11110", "10001", "10001", "11110"),
+    'C': ("01110", "10001", "10000", "10000", "10000", "10001", "01110"),
+    'D': ("11110", "10001", "10001", "10001", "10001", "10001", "11110"),
+    'E': ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
+    'F': ("11111", "10000", "10000", "11110", "10000", "10000", "10000"),
+    'G': ("01110", "10001", "10000", "10111", "10001", "10001", "01111"),
+    'H': ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
+    'I': ("01110", "00100", "00100", "00100", "00100", "00100", "01110"),
+    'J': ("00111", "00010", "00010", "00010", "00010", "10010", "01100"),
+    'K': ("10001", "10010", "10100", "11000", "10100", "10010", "10001"),
+    'L': ("10000", "10000", "10000", "10000", "10000", "10000", "11111"),
+    'M': ("10001", "11011", "10101", "10101", "10001", "10001", "10001"),
+    'N': ("10001", "11001", "10101", "10011", "10001", "10001", "10001"),
+    'O': ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
+    'P': ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
+    'Q': ("01110", "10001", "10001", "10001", "10101", "10010", "01101"),
+    'R': ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
+    'S': ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
+    'T': ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
+    'U': ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
+    'V': ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
+    'W': ("10001", "10001", "10001", "10101", "10101", "11011", "10001"),
+    'X': ("10001", "10001", "01010", "00100", "01010", "10001", "10001"),
+    'Y': ("10001", "10001", "01010", "00100", "00100", "00100", "00100"),
+    'Z': ("11111", "00001", "00010", "00100", "01000", "10000", "11111"),
+    '0': ("01110", "10001", "10011", "10101", "11001", "10001", "01110"),
+    '1': ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
+    '2': ("01110", "10001", "00001", "00110", "01000", "10000", "11111"),
+    '3': ("11111", "00010", "00100", "00010", "00001", "10001", "01110"),
+    '4': ("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
+    '5': ("11111", "10000", "11110", "00001", "00001", "10001", "01110"),
+    '6': ("00110", "01000", "10000", "11110", "10001", "10001", "01110"),
+    '7': ("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
+    '8': ("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
+    '9': ("01110", "10001", "10001", "01111", "00001", "00010", "01100"),
+    ' ': ("00000", "00000", "00000", "00000", "00000", "00000", "00000"),
+    '.': ("00000", "00000", "00000", "00000", "00000", "01100", "01100"),
+    ',': ("00000", "00000", "00000", "00000", "01100", "00100", "01000"),
+    ':': ("00000", "01100", "01100", "00000", "01100", "01100", "00000"),
+    ';': ("00000", "01100", "01100", "00000", "01100", "00100", "01000"),
+    '-': ("00000", "00000", "00000", "01110", "00000", "00000", "00000"),
+    '%': ("11001", "11010", "00010", "00100", "01000", "01011", "10011"),
+    '(': ("00010", "00100", "01000", "01000", "01000", "00100", "00010"),
+    ')': ("01000", "00100", "00010", "00010", "00010", "00100", "01000"),
+    '/': ("00001", "00010", "00010", "00100", "01000", "01000", "10000"),
+    "'": ("00100", "00100", "01000", "00000", "00000", "00000", "00000"),
+    '&': ("01100", "10010", "10100", "01000", "10101", "10010", "01101"),
+    '+': ("00000", "00100", "00100", "01110", "00100", "00100", "00000"),
+    '?': ("01110", "10001", "00001", "00110", "00100", "00000", "00100"),
+    '!': ("00100", "00100", "00100", "00100", "00100", "00000", "00100"),
+    '=': ("00000", "00000", "11111", "00000", "11111", "00000", "00000"),
+    '"': ("01010", "01010", "00000", "00000", "00000", "00000", "00000"),
 }
 
-
-# ---------------------------------------------------------------- canvas
-
-class Page:
-    def __init__(self):
-        self.px = bytearray(PAPER * W * H)
-
-    def dot(self, x, y, colour):
-        if 0 <= x < W and 0 <= y < H:
-            i = (y * W + x) * 3
-            self.px[i:i + 3] = bytes(colour)
-
-    def rect(self, x, y, w, h, colour):
-        for yy in range(y, y + h):
-            for xx in range(x, x + w):
-                self.dot(xx, yy, colour)
-
-    def box(self, x, y, w, h, colour):
-        self.rect(x, y, w, 1, colour)
-        self.rect(x, y + h - 1, w, 1, colour)
-        self.rect(x, y, 1, h, colour)
-        self.rect(x + w - 1, y, 1, h, colour)
-
-    def text(self, s, x, y, scale, colour):
-        s = s.upper()
-        cx = x
-        for ch in s:
-            glyph = GLYPHS.get(ch, GLYPHS[' '])
-            for r, row in enumerate(glyph):
-                for c, cell in enumerate(row):
-                    if cell == '#':
-                        self.rect(cx + c * scale, y + r * scale,
-                                  scale, scale, colour)
-            cx += 6 * scale
-        return cx
-
-    def text_w(self, s, scale):
-        return len(s) * 6 * scale
-
-    def centred(self, s, y, scale, colour, x0=0, x1=W):
-        w = self.text_w(s, scale)
-        self.text(s, x0 + (x1 - x0 - w) // 2, y, scale, colour)
-
-    def wrap(self, s, x, y, max_w, scale, colour, gap=10):
-        words = s.upper().split()
-        line = ''
-        cy = y
-        for word in words:
-            trial = (line + ' ' + word).strip()
-            if self.text_w(trial, scale) <= max_w or not line:
-                line = trial
-            else:
-                self.text(line, x, cy, scale, colour)
-                cy += 7 * scale + gap - 7 * scale
-                cy += 2
-                line = word
-        if line:
-            self.text(line, x, cy, scale, colour)
-        return cy + 7 * scale
+pix = bytearray(W * H * 3)
+for _i in range(W * H):
+    pix[_i * 3] = 255
+    pix[_i * 3 + 1] = 255
+    pix[_i * 3 + 2] = 255
 
 
-def chunk(kind, data):
-    out = struct.pack('>I', len(data)) + kind + data
-    out += struct.pack('>I', zlib.crc32(kind + data) & 0xFFFFFFFF)
-    return out
+def set_px(x, y, col):
+    if 0 <= x < W and 0 <= y < H:
+        o = (y * W + x) * 3
+        pix[o] = col[0]
+        pix[o + 1] = col[1]
+        pix[o + 2] = col[2]
 
 
-def write_png(page, path):
+def fill_rect(x, y, w, h, col):
+    for yy in range(y, y + h):
+        for xx in range(x, x + w):
+            set_px(xx, yy, col)
+
+
+def box(x, y, w, h, col, thick=2):
+    fill_rect(x, y, w, thick, col)
+    fill_rect(x, y + h - thick, w, thick, col)
+    fill_rect(x, y, thick, h, col)
+    fill_rect(x + w - thick, y, thick, h, col)
+
+
+def hline(x, y, w, col, thick=2):
+    fill_rect(x, y, w, thick, col)
+
+
+def text_w(s, scale):
+    return len(s) * 6 * scale - scale
+
+
+def draw_text(x, y, s, scale, col):
+    s = s.upper()
+    cx = x
+    for ch in s:
+        g = FONT.get(ch, FONT[' '])
+        for r in range(7):
+            row = g[r]
+            for c in range(5):
+                if row[c] == '1':
+                    fill_rect(cx + c * scale, y + r * scale, scale, scale, col)
+        cx += 6 * scale
+    return cx
+
+
+def draw_centered(y, s, scale, col):
+    draw_text((W - text_w(s, scale)) // 2, y, s, scale, col)
+
+
+def wrap(s, scale, max_w):
+    words = s.upper().split(' ')
+    lines = []
+    cur = ''
+    for wd in words:
+        trial = wd if not cur else cur + ' ' + wd
+        if text_w(trial, scale) <= max_w:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = wd
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def draw_para(x, y, s, scale, col, max_w, lh=None):
+    if lh is None:
+        lh = 7 * scale + 4
+    for ln in wrap(s, scale, max_w):
+        draw_text(x, y, ln, scale, col)
+        y += lh
+    return y
+
+
+def chunk(tag, data):
+    c = struct.pack('>I', len(data)) + tag + data
+    return c + struct.pack('>I', zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+
+def write_png(path):
     raw = bytearray()
     for y in range(H):
         raw.append(0)
-        raw += page.px[y * W * 3:(y + 1) * W * 3]
+        raw.extend(pix[y * W * 3:(y + 1) * W * 3])
     ihdr = struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0)
-    png = b'\x89PNG\r\n\x1a\n'
-    png += chunk(b'IHDR', ihdr)
-    png += chunk(b'IDAT', zlib.compress(bytes(raw), 9))
-    png += chunk(b'IEND', b'')
+    data = b'\x89PNG\r\n\x1a\n'
+    data += chunk(b'IHDR', ihdr)
+    data += chunk(b'IDAT', zlib.compress(bytes(raw), 9))
+    data += chunk(b'IEND', b'')
     with open(path, 'wb') as f:
-        f.write(png)
+        f.write(data)
 
 
-# ---------------------------------------------------------------- layout
-
-def story(page, x, y, w, h, kicker, head, body):
-    page.box(x, y, w, h, INK)
-    page.rect(x, y, w, 3, RED)
-    page.text(kicker, x + 12, y + 12, 1, RED)
-    hy = y + 30
-    for line in head:
-        page.text(line, x + 12, hy, 2, INK)
-        hy += 18
-    page.wrap(body, x + 12, hy + 6, w - 24, 1, INK)
-
-
-def bar_chart(page, x, y, w, title, rows):
-    page.text(title, x, y, 1, NAVY)
-    cy = y + 14
-    for name, val in rows:
-        page.text(name, x, cy, 1, INK)
-        bx = x + 92
-        bw = int((w - 92 - 44) * val / 35)
-        page.rect(bx, cy, bw, 9, RED)
-        page.text(str(val) + '%', bx + bw + 6, cy, 1, INK)
-        cy += 17
-    return cy
-
-
-def build():
-    p = Page()
-    # Masthead.
-    p.centred('THE WORLD TODAY', 22, 7, INK)
-    p.centred('THURSDAY 26 NOVEMBER 2026  -  ONE DAY IN ONE PAGE',
-              84, 2, RED)
-    p.rect(28, 112, 968, 3, INK)
-    p.rect(28, 118, 968, 1, INK)
-
-    # Lead story: tariffs, with a bar chart of the ceilings.
-    p.box(28, 132, 968, 296, INK)
-    p.rect(28, 132, 968, 3, RED)
-    p.text('LEAD  -  TRADE WAR', 44, 148, 1, RED)
-    p.text('US HITS 14 PARTNERS', 44, 168, 4, INK)
-    p.text('WITH NEW TARIFFS', 44, 198, 4, INK)
-    p.wrap('WASHINGTON PROPOSED NEW TARIFFS ON 14 TRADING '
-           'PARTNERS, INCLUDING INDONESIA, CHINA, THE EU, '
-           'JAPAN AND INDIA, TO FIGHT WHAT IT CALLS EXCESS '
-           'FACTORY CAPACITY. THE DUTIES WOULD FOLLOW A '
-           'PUBLIC COMMENT PERIOD AND A HEARING IN JANUARY.',
-           44, 238, 560, 1, INK)
-    p.wrap('JAPAN CALLED THE PLAN REGRETTABLE. INDONESIA, '
-           'FACING 18%, IS REVIEWING THE IMPACT WITH ITS '
-           'INDUSTRIES BEFORE IT RESPONDS.',
-           44, 306, 560, 1, RED)
-    p.wrap('THE 14: CHINA, EU, INDIA, INDONESIA, JAPAN, '
-           'SOUTH KOREA, TAIWAN, VIETNAM, THAILAND, '
-           'MALAYSIA, SINGAPORE, CAMBODIA, BANGLADESH, '
-           'SWITZERLAND. MEXICO AND NORWAY ARE EXCLUDED '
-           'FOR NOW.',
-           44, 348, 560, 1, INK)
-    p.rect(628, 148, 1, 262, GREY)
-    bar_chart(p, 648, 148, 332, 'PROPOSED CEILINGS, %',
-              [('VIETNAM', 35), ('INDIA', 25), ('CHINA', 20),
-               ('INDONESIA', 18), ('EU', 15), ('JAPAN', 15)])
-    p.wrap('CHINA FACES THE HIGHEST RATE OF THE BIG '
-           'ECONOMIES. VIETNAM AND INDIA PAY LESS IF '
-           'THEY REACH A TRADE DEAL.',
-           648, 268, 332, 1, INK)
-
-    # Row one.
-    story(p, 28, 444, 312, 196, 'EGYPT  -  DISASTER',
-          ['CAIRO TANKER', 'FIRE KILLS 31'],
-          'A FUEL TANKER CRASHED AND CAUGHT FIRE ON THE '
-          'RING ROAD IN WARRAQ, NEAR CAIRO, KILLING AT '
-          'LEAST 31 PEOPLE AND INJURING 21. THE BLAZE '
-          'DESTROYED 27 VEHICLES.')
-    story(p, 356, 444, 312, 196, 'GULF  -  OIL',
-          ['HOUTHIS HIT', 'SAUDI REFINERY'],
-          "YEMEN'S HOUTHIS SAID THEY HIT THE RAS TANURA "
-          'REFINERY AND RIYADH FINANCIAL DISTRICT. A '
-          'PROJECTILE FELL AT JAZAN PORT. BRENT ROSE '
-          '3.5% ON WEDNESDAY.')
-    story(p, 684, 444, 312, 196, 'MARKETS  -  AI SLUMP',
-          ['NASDAQ BRIEFLY', 'IN BEAR MARKET'],
-          'THE NASDAQ 100 FELL 20% FROM ITS OCTOBER PEAK '
-          'IN EARLY TRADE, TOUCHING BEAR-MARKET GROUND, '
-          'BEFORE RECOVERING TO CLOSE DOWN 0.64%. '
-          'NVIDIA FELL 3.9%.')
-
-    # Row two.
-    story(p, 28, 656, 312, 196, 'WAR  -  UKRAINE',
-          ['KYIV HITS FIVE', 'RUSSIAN JETS'],
-          'UKRAINE SAID IT DAMAGED FIVE RUSSIAN JETS AT '
-          'THE SAVASLEYKA AIR BASE, THREE MIG-31S AND '
-          'TWO SU-34S, IN STRIKES ON 24-25 NOVEMBER. '
-          'MOSCOW DID NOT COMMENT.')
-    story(p, 356, 656, 312, 196, 'MIDDLE EAST  -  WARNING',
-          ['US: LEAVE IRAN', 'AT ONCE'],
-          'WASHINGTON TOLD ITS CITIZENS TO LEAVE IRAN '
-          'IMMEDIATELY, WARNING HOSTILITIES COULD '
-          'ESCALATE FAST, AFTER IRAN HIT US ASSETS IN '
-          'BAHRAIN AND KUWAIT.')
-    story(p, 684, 656, 312, 196, 'EUROPE  -  SUMMIT',
-          ['EU SPLIT OVER', '45BN UKRAINE LOAN'],
-          'LEADERS MET IN BRUSSELS ON THURSDAY TO ARGUE '
-          'OVER A 45 BILLION EURO LOAN FOR UKRAINE AND '
-          'A 1.6 TRILLION EURO BUDGET. FOUR STATES '
-          'OBJECT TO THE LOAN.')
-
-    # Also today strip.
-    p.box(28, 868, 968, 116, INK)
-    p.rect(28, 868, 968, 3, NAVY)
-    p.text('ALSO TODAY', 44, 882, 1, NAVY)
-    items = [
-        ('BOGOR MINE', '13 DEAD FOUND, 13 STILL TRAPPED IN A FLOODED ILLEGAL GOLD MINE.'),
-        ('KIM JONG UN', 'URGES WIDER TACTICAL NUCLEAR DEPLOYMENT, KCNA REPORTS.'),
-        ('SPACEX', 'FCC CLEARS 1 MILLION STARMIND DATA-CENTRE SATELLITES.'),
-        ('NETANYAHU', 'JUDGES URGE PROSECUTORS TO DROP THE CASE 4000 BRIBERY CHARGE.'),
-        ('LIVERPOOL', 'BEAT CLUB BRUGGE 3-0. ISAK SCORED TWICE, WIRTZ ONCE.'),
-    ]
-    cx = 44
-    for head, body in items:
-        w = 184 if head != 'NETANYAHU' else 200
-        p.text(head, cx, 902, 1, RED)
-        p.wrap(body, cx, 918, w - 8, 1, INK)
-        cx += w + 6
-        if head != 'LIVERPOOL':
-            p.rect(cx - 6, 902, 1, 66, GREY)
-
-    # Footer.
-    p.centred('SOURCES: REUTERS, AP, KCNA, FCC  -  DRAWN FROM SCRATCH, NO PHOTOS',
-              996, 1, GREY)
-    return p
+def story_box(x, y, w, h, title, body):
+    fill_rect(x, y, w, h, LIGHT)
+    box(x, y, w, h, BLACK, 2)
+    ty = draw_para(x + 12, y + 10, title, 2, NAVY, w - 24, 18)
+    hline(x + 12, ty + 2, w - 24, RED, 3)
+    draw_para(x + 12, ty + 10, body, 2, INK, w - 24, 18)
 
 
 def main():
-    out = os.environ.get('MAKEFUN_OUTPUT_DIR', '/output')
+    # Masthead
+    fill_rect(24, 14, 976, 4, NAVY)
+    draw_centered(26, "THE WORLD TODAY", 8, NAVY)
+    draw_centered(88, "THURSDAY 26 NOVEMBER 2026", 3, BLACK)
+    hline(24, 110, 976, BLACK, 3)
+
+    # Lead story
+    fill_rect(24, 120, 976, 320, WHITE)
+    box(24, 120, 976, 320, BLACK, 3)
+    draw_text(40, 132, "LEAD STORY - TRADE", 2, RED)
+    draw_text(40, 156, "US PROPOSES NEW TARIFFS", 4, BLACK)
+    draw_text(40, 190, "ON 14 TRADING PARTNERS", 4, BLACK)
+    hline(40, 228, 944, GREY, 2)
+    ly = draw_para(40, 240, "WASHINGTON PROPOSES NEW TARIFFS ON 14 TRADING "
+        "PARTNERS TO FIGHT EXCESS FACTORY CAPACITY. DUTIES FOLLOW A PUBLIC "
+        "COMMENT PERIOD AND A HEARING IN JANUARY. JAPAN CALLED THE PLAN "
+        "REGRETTABLE. INDONESIA, AT 18 PERCENT, IS REVIEWING THE IMPACT.",
+        2, INK, 540, 18)
+    draw_para(40, ly + 8, "THE 14: CHINA, EU, INDIA, INDONESIA, JAPAN, SOUTH "
+        "KOREA, TAIWAN, VIETNAM, THAILAND, MALAYSIA, SINGAPORE, CAMBODIA, "
+        "BANGLADESH, SWITZERLAND. MEXICO, NORWAY OUT FOR NOW.",
+        2, INK, 540, 18)
+    # Chart on the right of the lead
+    draw_text(612, 240, "PROPOSED CEILINGS", 2, NAVY)
+    hline(612, 260, 360, RED, 3)
+    bars = [("VIETNAM", 35), ("INDIA", 25), ("CHINA", 20),
+            ("INDONESIA", 18), ("EU", 15), ("JAPAN", 15)]
+    by = 272
+    for name, val in bars:
+        draw_text(612, by, name, 2, INK)
+        bw = int(val * 180 / 35)
+        fill_rect(736, by + 2, bw, 10, BLUE)
+        draw_text(736 + bw + 8, by, str(val) + "%", 2, BLACK)
+        by += 28
+
+    # Six story boxes, two rows of three
+    bw3 = 317
+    stories = [
+        ("CAIRO TANKER FIRE KILLS 31",
+         "FUEL TANKER CRASHED AND CAUGHT FIRE ON THE RING ROAD IN WARRAQ, "
+         "NEAR CAIRO. AT LEAST 31 DEAD, 21 INJURED. 27 VEHICLES DESTROYED."),
+        ("HOUTHIS HIT SAUDI REFINERY",
+         "HOUTHIS SAID THEY HIT THE RAS TANURA REFINERY AND RIYADH FINANCIAL "
+         "DISTRICT. A PROJECTILE FELL AT JAZAN PORT. BRENT ROSE 3.5 PERCENT "
+         "ON WEDNESDAY."),
+        ("NASDAQ BRIEFLY IN BEAR MARKET",
+         "NASDAQ 100 FELL 20 PERCENT FROM ITS OCTOBER PEAK IN EARLY TRADE, "
+         "BEFORE RECOVERING TO CLOSE DOWN 0.64 PERCENT. NVIDIA FELL 3.9 PERCENT."),
+        ("KYIV HITS FIVE RUSSIAN JETS",
+         "UKRAINE SAID IT DAMAGED FIVE RUSSIAN JETS AT SAVASLEYKA AIR BASE, "
+         "THREE MIG-31S AND TWO SU-34S, IN STRIKES ON 24-25 NOVEMBER. "
+         "MOSCOW DID NOT COMMENT."),
+        ("US: LEAVE IRAN AT ONCE",
+         "WASHINGTON TOLD ITS CITIZENS TO LEAVE IRAN IMMEDIATELY, WARNING "
+         "HOSTILITIES COULD ESCALATE FAST, AFTER IRAN HIT US ASSETS IN "
+         "BAHRAIN AND KUWAIT."),
+        ("EU SPLIT OVER 45BN UKRAINE LOAN",
+         "LEADERS MET IN BRUSSELS ON THURSDAY OVER A 45 BILLION EURO LOAN "
+         "FOR UKRAINE AND A 1.6 TRILLION EURO BUDGET. FOUR STATES OBJECT."),
+    ]
+    for i, (t, b) in enumerate(stories):
+        col = i % 3
+        row = i // 3
+        x = 24 + col * (bw3 + 12)
+        y = 452 + row * (190 + 12)
+        story_box(x, y, bw3, 190, t, b)
+
+    # Also-today strip
+    fill_rect(24, 856, 976, 116, LIGHT)
+    box(24, 856, 976, 116, BLACK, 2)
+    draw_text(40, 866, "ALSO TODAY", 2, RED)
+    also = [
+        "BOGOR MINE: 13 DEAD FOUND, 13 STILL TRAPPED IN A FLOODED ILLEGAL GOLD MINE.",
+        "KIM JONG UN: URGES WIDER TACTICAL NUCLEAR DEPLOYMENT, KCNA REPORTS.",
+        "SPACEX: FCC CLEARS 1 MILLION STARMIND DATA-CENTRE SATELLITES.",
+        "NETANYAHU: JUDGES URGE PROSECUTORS TO DROP THE CASE 4000 BRIBERY CHARGE.",
+        "LIVERPOOL: BEAT CLUB BRUGGE 3-0. ISAK SCORED TWICE, WIRTZ ONCE.",
+    ]
+    ay = 888
+    for line in also:
+        draw_text(40, ay, line, 2, INK)
+        ay += 17
+
+    # Footer
+    draw_centered(986, "SOURCES: REUTERS, AP, KCNA, FCC - DRAWN FROM SCRATCH, NO PHOTOS.", 2, GREY)
+
+    out = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
     os.makedirs(out, exist_ok=True)
-    write_png(build(), os.path.join(out, 'entry.png'))
+    write_png(os.path.join(out, "entry.png"))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
